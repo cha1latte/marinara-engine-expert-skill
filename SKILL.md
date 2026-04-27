@@ -163,6 +163,19 @@ Name these limits when they're relevant. The user respects straight answers more
 
 The user is shipping a change to the Marinara codebase. Default workflow:
 
+### 0. Scope the work before any code is written (features only)
+
+**For any new feature or non-trivial change, do this BEFORE writing code:**
+
+Check whether there's an open GitHub issue or Discord thread where a maintainer has signaled this fits the project direction. If there isn't one, **stop and tell the user to open one before writing more code.** Don't let them spend hours on a 500-line PR that might come back as "this should actually go in a different panel" or "we already decided not to add this."
+
+- Issue tracker: `https://github.com/Pasta-Devs/Marinara-Engine/issues`
+- Discord channel: `#🍝-marinara-engine`
+
+What to draft for the user to post: a 3–5 sentence "thinking of taking this — does it fit, and is anyone working on something adjacent?" message. Include the rough approach so maintainers can redirect early ("yes but use the existing X panel, not a new one").
+
+Bug fixes can skip this step if the bug is reproducible and the fix is small and obvious. Anything else, scope first.
+
 ### 1. Triage before touching code
 
 If the user is open-ended ("what should I work on?", "any good PRs to review?", "where can I help?"), start by listing open PRs and ranking by urgency. Factors:
@@ -207,7 +220,24 @@ If you (the AI) don't have a concrete spec yet, push the user to keep diagnosing
 - Stage specific files (`git add path/to/file`). **Never** `git add -A` or `git add .` — picks up `.claude/`, scratch files, user data.
 - Commit with a conventional-commits message: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`, `ci:`. Match the repo's existing tone.
 
-### 5. PR body
+### 5. Pre-submission checklist (mandatory — do not skip)
+
+**Before you tell the user the PR is ready, walk them through this checklist and confirm each item ACTUALLY happened.** A passing CodeRabbit is the floor, not the ceiling — automated tooling cannot catch "the button is invisible in light mode" or "this throws when the textarea is empty." Only manual testing does.
+
+Required for every PR:
+
+1. **`pnpm check` passes locally.** Green is the floor.
+2. **The user ran the app and clicked through the new feature themselves.** `pnpm dev` running, browser open, every code path the change touches actually exercised by hand.
+3. **The user tried the obvious edge cases:**
+   - Light mode AND dark mode
+   - Mobile viewport (resize browser to ~400px wide, or use devtools device emulation)
+   - Empty states (no data, empty input, missing field)
+   - Error states (failed request, invalid input, network offline)
+4. **For any UI change: before/after screenshots captured for the PR body.** Animated GIF if the change is about interaction (typing indicators, modals, drawers, transitions).
+
+If the user hasn't done all of these, **do not let them submit.** Smaller fully-working PRs land in one round; bigger ones that skip this checklist need three rounds of fixes and burn maintainer time.
+
+### 6. PR body
 
 Cover, in this order:
 
@@ -215,11 +245,10 @@ Cover, in this order:
 2. **Why** — the user problem or rationale. Reviewers want to see the motivation, not just the diff.
 3. **Architecture** — if multi-layer (shared schema → server → client), a short table or list. Otherwise skip.
 4. **Known limitations** — be honest about scope trade-offs. Documented limitations help reviewers; hidden ones get found in review and slow things down.
-5. **Test plan** — what you manually verified. Be specific. "Tested adding a character" is weak; "Created a new character with description containing emoji and a 2KB markdown block; reloaded the page; confirmed render and edit both work" is useful.
+5. **Test plan** — what the **user** manually verified, not what you (the AI) generated as a list. Be specific. "Tested adding a character" is weak; "Created a new character with description containing emoji and a 2KB markdown block; reloaded the page; confirmed render and edit both work in light + dark mode" is useful. **Only tick a checkbox if the user has actually performed that step.** See the anti-pattern below.
+6. **Screenshots / GIFs** — required for any UI change (per `CONTRIBUTING.md`).
 
-Include screenshots for any UI change (per `CONTRIBUTING.md`). Animated GIFs for interaction changes (typing indicators, modals, drawers).
-
-### 6. Walk the user through changes
+### 7. Walk the user through changes
 
 The user is contributing as a learner. Don't silently batch edits. Explain each file as you change it: "Adding the new agent type to the shared schema enum first, so both server and client can use it." If you don't know something, say so before guessing.
 
@@ -236,13 +265,15 @@ This avoids the stacking failure mode where one agent juggles three PRs and rush
 
 ### Anti-patterns (contributor)
 
+- **🔴 "All the test-plan checkboxes are ticked, ship it."** This is the most important anti-pattern. If *you* (Claude) generated the test plan and ticked the boxes, **you have not tested anything** — you wrote a list. The user must perform each step in a real browser before any box is ticked. If the box says "manually verified X in browser," the user must have actually done that. **Untick or rewrite any box the user can't honestly confirm they performed themselves.** This has burned the maintainer multiple times: PRs arrive with every box ticked and the feature visibly doesn't work the moment they open it. Treat AI-ticked boxes as a to-do list for the user, not as evidence the work is done. Hard rule.
 - **"Let's also clean up X while we're here"** → Bug fixes shouldn't carry refactoring. Open a separate PR. Mixed-purpose PRs are harder to review and harder to revert.
-- **"The AI says it's fixed"** → The AI hasn't run the code. Run `pnpm dev`, reproduce the original failure, confirm the fix manually.
+- **"CodeRabbit passed, we're good"** → CodeRabbit is the floor, not the ceiling. It catches some code-level issues; it does not catch "the button is invisible in light mode," "this throws when the textarea is empty," or "this layout breaks on mobile." Manual testing is mandatory regardless of CodeRabbit status.
+- **"The AI says it's fixed"** → The AI hasn't run the code. The user runs `pnpm dev`, reproduces the original failure, confirms the fix manually — then and only then is it fixed.
 - **"Just add `--no-verify` to the commit"** → Pre-commit hooks failing means something is wrong. Fix the underlying issue. Skipping hooks is how broken commits land on `main`.
 - **"Let me amend this commit and force-push"** → Only safe before opening the PR. After review starts, prefer new commits so reviewers can see what changed.
 - **"I'll just fix this in the PR's branch directly"** → If it's not your PR, don't push to the author's branch. Leave a review comment.
 - **"This bug is obvious from the code, no need to repro"** → Repro anyway. The "obvious" cause is wrong about a quarter of the time.
-- **"Let me ship without writing the test plan"** → The test plan in the PR body is what reviewers use to gate merge. Without it, they have to manually figure out how to verify, which slows everything down or causes a skipped review.
+- **"It's a small change, I'll skip the edge cases"** → Light/dark, mobile, empty, error. Five minutes of clicking saves three rounds of review.
 
 ### Validation reference
 
