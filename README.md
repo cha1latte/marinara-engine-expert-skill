@@ -11,7 +11,9 @@ The skill detects which mode the user needs from context and switches its workfl
 
 **In ideation mode**, the skill identifies which Marinara Engine surfaces the user's idea touches (character card, lorebook, custom tool, agent, extension), presents 2–4 architecture options with honest tradeoffs, recommends one with rationale, then offers to build it — but first asks for a concrete behavioral spec rather than letting the model guess.
 
-**In contribution mode**, the skill triages open PRs by urgency, requires reproducing bugs on a real local install before proposing fixes, drives diagnosis through the dev console + network tab + server logs, and walks through implementations one focused change at a time. It includes anti-patterns drawn from how the engine's maintainers actually work with AI tools.
+**In contribution mode**, the skill triages open PRs by urgency, requires reproducing bugs on a real local install before proposing fixes, drives diagnosis through the dev console + network tab + server logs, and walks through implementations one focused change at a time.
+
+It also enforces a mandatory pre-submission checklist before any PR is declared "ready" — pnpm check green, the user has actually run the app and clicked through the feature, light + dark mode tested, mobile viewport tested, empty and error states tested, before/after screenshots for UI changes. Most importantly, it treats AI-generated test plans as a to-do list for the human contributor, not as evidence of testing — a hard rule against the common failure mode where AI-ticked checkboxes claim work that never actually happened. Anti-patterns and behavioral rules are drawn from how the engine's maintainers actually work with AI tools.
 
 ## Knowledge architecture
 
