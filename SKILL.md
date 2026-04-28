@@ -242,6 +242,37 @@ If you (the AI) don't have a concrete spec yet, push the user to keep diagnosing
   - `pnpm guard:installer-artifacts` — required, CI runs this
 - Stage specific files (`git add path/to/file`). **Never** `git add -A` or `git add .` — picks up `.claude/`, scratch files, user data.
 - Commit with a conventional-commits message: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`, `ci:`. Match the repo's existing tone.
+- **Update affected docs in the same PR.** If your change touches user-visible behavior (install flow, env vars, launchers, releases, FAQ topics), update the relevant doc as part of THIS PR. Stale docs are a real failure mode and the contributor guide requires it.
+  - `README.md` — user-facing overview, quickstart
+  - `CHANGELOG.md` — release notes (if the change ships in a release)
+  - `docs/CONFIGURATION.md` — env vars, ports, HTTPS, launcher behavior, `.env` reference
+  - `docs/TROUBLESHOOTING.md` — common user-facing issues and fixes
+  - `docs/FAQ.md` — user FAQ (LAN access, common questions)
+  - `android/README.md` — Android wrapper / Termux-specific
+  - `CONTRIBUTING.md` — only for contributor-workflow changes (rare)
+
+#### Server logging (Pino, never `console.log`)
+
+Server-side code in `packages/server/` uses a shared Pino logger. **Never use `console.log/warn/error` in server code** — always import the shared logger:
+
+```ts
+import { logger } from "../lib/logger.js"; // adjust relative path
+```
+
+Pick the right level:
+- `logger.error(err, "...")` — unrecoverable failures (DB errors, fatal agent failures, image gen crashes). **Error object goes first**, Pino convention for structured output.
+- `logger.warn(...)` — non-fatal issues (failed agent that won't block the request, missing connections, empty model responses)
+- `logger.info(...)` — operational milestones (commands executed, sessions started, seed results)
+- `logger.debug(...)` — verbose detail only useful when actively debugging (full prompts/responses, timing traces, state patches)
+
+Use Pino format specifiers, **not console-style positional args** — Pino silently drops them:
+- ❌ `logger.info("Resolved agents:", count)` — second arg ignored
+- ✅ `logger.info("Resolved %d agents", count)` — Pino format specifier
+- ✅ `` logger.info(`Resolved ${count} agents`) `` — template literal, single string
+
+Client-side code (`packages/client/`) keeps using `console.*` — the browser has no Pino. Production builds strip `console.log` via Vite's esbuild pure option; `console.warn`/`console.error` survive.
+
+Route handlers that already have access to `app.log` or `req.log` can use those — they're child loggers of the same Pino instance and inherit the same level.
 
 ### 5. Pre-submission checklist (mandatory — do not skip)
 
@@ -266,12 +297,14 @@ If the user hasn't done all of these, **do not let them submit.** Smaller fully-
 
 Cover, in this order:
 
-1. **Summary** — one or two sentences, what changed.
-2. **Why** — the user problem or rationale. Reviewers want to see the motivation, not just the diff.
-3. **Architecture** — if multi-layer (shared schema → server → client), a short table or list. Otherwise skip.
-4. **Known limitations** — be honest about scope trade-offs. Documented limitations help reviewers; hidden ones get found in review and slow things down.
-5. **Test plan** — what the **user** manually verified, not what you (the AI) generated as a list. Be specific. "Tested adding a character" is weak; "Created a new character with description containing emoji and a 2KB markdown block; reloaded the page; confirmed render and edit both work in light + dark mode" is useful. **Only tick a checkbox if the user has actually performed that step.** See the anti-pattern below.
-6. **Screenshots / GIFs** — required for any UI change (per `CONTRIBUTING.md`).
+1. **Link the issue or feature request.** Every PR should reference the issue or Discord thread that prompted it (the one from Section 0). Reviewers use this to verify scope alignment — "fixes #123" or a link to the Discord thread at the top of the body. Required by the contributor guide.
+2. **Summary** — one or two sentences, what changed.
+3. **Why** — the user problem or rationale. Reviewers want to see the motivation, not just the diff.
+4. **Architecture** — if multi-layer (shared schema → server → client), a short table or list. Otherwise skip.
+5. **Known limitations** — be honest about scope trade-offs. Documented limitations help reviewers; hidden ones get found in review and slow things down.
+6. **Test plan** — what the **user** manually verified, not what you (the AI) generated as a list. Be specific. "Tested adding a character" is weak; "Created a new character with description containing emoji and a 2KB markdown block; reloaded the page; confirmed render and edit both work in light + dark mode" is useful. **Only tick a checkbox if the user has actually performed that step.** See the anti-pattern below.
+7. **Screenshots / GIFs** — required for any UI change (per `CONTRIBUTING.md`).
+8. **Docs touched** — if you updated any `README.md` / `CHANGELOG.md` / `docs/*.md` in this PR, list them so reviewers know to check the doc changes too. If a doc *should* have been touched but wasn't, flag it explicitly (and ideally fix it).
 
 ### 7. Walk the user through changes (in plain language)
 
@@ -324,6 +357,44 @@ pnpm guard:installer-artifacts   # no tracked .exe files (CI runs this)
 Dev URLs: client at `http://localhost:5173`, server at `http://localhost:7860`.
 
 **Restart `pnpm dev` fully when you edit `packages/shared/**`** — the shared package only rebuilds at startup via `pnpm build:shared`. HMR handles client/server changes but not shared.
+
+There is **no meaningful automated test suite yet** — don't reference `pnpm test` as a gate in PR descriptions. Manual verification is the gate.
+
+### Version drift (if you touch any version-bearing file)
+
+The Marinara root version lives in `package.json`. When that changes, **all** of these derived files must update in the same pass — `pnpm version:check` runs in CI and will fail if any drift:
+
+| File | Role |
+|---|---|
+| `package.json` | Canonical application version |
+| `packages/client/package.json` | Derived workspace version |
+| `packages/server/package.json` | Derived workspace version |
+| `packages/shared/package.json` | Derived workspace version |
+| `packages/shared/src/constants/defaults.ts` | `APP_VERSION` constant used by app + update checks |
+| `win/installer/installer.nsi` | Windows installer output version |
+| `win/installer/install.bat` | Windows installer banner text |
+| `android/app/build.gradle` | Android `versionName` AND `versionCode` |
+
+**Android rule:** `versionName` must match the app version. `versionCode` must increase monotonically for every shipped APK — never reuse, never decrement.
+
+**Don't edit these by hand.** Use the helper:
+
+```bash
+pnpm version:sync -- --android-version-code <next-code>
+```
+
+This bumps every derived file from the canonical root `package.json` version, plus sets the Android `versionCode` to the value you passed.
+
+**Release flow** (only when the user is cutting a release, not for normal PRs):
+
+1. Bump `package.json` version (canonical source)
+2. `pnpm version:sync -- --android-version-code <next>`
+3. Update `CHANGELOG.md` with the new version's notes
+4. Commit: `chore: release vX.Y.Z`
+5. Tag: `git tag vX.Y.Z && git push --tags`
+6. Release workflow publishes from `CHANGELOG.md` automatically; Docker images publish on `v*` tags
+
+Never tag or publish without `pnpm version:check` passing first. Never commit built installer binaries — `pnpm guard:installer-artifacts` will fail. Built installers belong on GitHub Releases.
 
 ### When you don't know
 
