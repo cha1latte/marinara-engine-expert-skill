@@ -242,6 +242,8 @@ If you (the AI) don't have a concrete spec yet, push the user to keep diagnosing
   - `pnpm guard:installer-artifacts` — required, CI runs this
 - Stage specific files (`git add path/to/file`). **Never** `git add -A` or `git add .` — picks up `.claude/`, scratch files, user data.
 - Commit with a conventional-commits message: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`, `ci:`. Match the repo's existing tone.
+- **Don't add bot self-attribution to commits or PRs.** No "🤖 Generated with Claude Code" trailer, no "Co-Authored-By: Claude" line, no AI signature in PR descriptions. Marinara's maintainers prefer commits and PRs that read as the contributor's work. Only include an attribution line if the user explicitly asks for it.
+- **Never push directly to `main`.** Never merge directly to `main`. Never edit `main` from your local machine. All changes go through a branch + PR. Merging is the maintainer's call, not yours — even for tiny "obvious" fixes.
 - **Update affected docs in the same PR.** If your change touches user-visible behavior (install flow, env vars, launchers, releases, FAQ topics), update the relevant doc as part of THIS PR. Stale docs are a real failure mode and the contributor guide requires it.
   - `README.md` — user-facing overview, quickstart
   - `CHANGELOG.md` — release notes (if the change ships in a release)
@@ -274,6 +276,48 @@ Client-side code (`packages/client/`) keeps using `console.*` — the browser ha
 
 Route handlers that already have access to `app.log` or `req.log` can use those — they're child loggers of the same Pino instance and inherit the same level.
 
+#### Recommended test setup: dual install on different ports
+
+Marinara's maintainers run a separate test install at a different path on a different port (7820 instead of the default 7860), so feature work can be tested side-by-side with their normal install without disrupting their daily-driver characters/chats. **Strongly recommended for regular contributors** — it lets you exercise PR work in a real running engine without touching your own data.
+
+**One-time setup:**
+
+- **Dev directory** — where you edit code (e.g. `D:\dev\Marinara-Engine`). Your git working tree.
+- **Normal install** — your day-to-day Marinara, e.g. `<AppData>\Local\MarinaraEngine`.
+- **Test install** — a separate copy, e.g. `<AppData>\Local\MarinaraEngineTEST`, with a custom `teststart.bat` (or `.sh`) that launches the engine on **port 7820** instead of 7860 so it can run alongside the normal one. Test it at `http://localhost:7820/`.
+
+**Startup sync ritual** — before any new task, sync silently. Only report to the user if something failed or if the pull brought in commits; otherwise just proceed. **Use PowerShell, not git bash** — git bash mangles robocopy's slash flags.
+
+```powershell
+# 1. Sync dev dir with main
+git -C 'D:\dev\Marinara-Engine' checkout main
+git -C 'D:\dev\Marinara-Engine' pull origin main
+
+# 2. Mirror dev → test (excludes node_modules, .git, .claude, and the test launcher itself)
+robocopy 'D:\dev\Marinara-Engine' '<AppData>\Local\MarinaraEngineTEST' /MIR /XF teststart.bat /XD node_modules .git .claude /NFL /NDL /NP /R:1 /W:1
+
+# 3. /MIR purged user data — restore from your normal install
+robocopy '<AppData>\Local\MarinaraEngine\packages\server\data' '<AppData>\Local\MarinaraEngineTEST\packages\server\data' /E /NFL /NDL /NP /R:1 /W:1
+```
+
+**Robocopy exit codes: 0–7 = success, 8+ = failure.** Don't treat any non-zero return as an error; check the actual code.
+
+**Things the dev → test sync must NEVER touch in the test dir:** `teststart.bat` (custom launcher, hand-tuned), `.git` (the test dir is not a git repo), `.claude` (your personal config), `node_modules` (installed locally per dir).
+
+**Per-task workflow with this setup:**
+
+1. Work on a feature branch in your dev dir.
+2. Copy specific changed files into the test dir (or re-mirror after big changes):
+   ```powershell
+   copy 'D:\dev\Marinara-Engine\packages\client\src\components\chat\Foo.tsx' `
+        '<AppData>\Local\MarinaraEngineTEST\packages\client\src\components\chat\Foo.tsx'
+   ```
+3. Run `teststart.bat` in the test dir → engine builds and launches on port 7820.
+4. Test at `http://localhost:7820/` — go through the pre-submission checklist below.
+5. If green, commit + push from the dev dir, open the PR.
+
+This pattern is highly recommended but not strictly required — if the user prefers a simpler one-directory workflow, respect that. Just don't pretend you've tested without actually running the engine somewhere.
+
 ### 5. Pre-submission checklist (mandatory — do not skip)
 
 **This applies to PRs to the Marinara engine ONLY.** Extensions, themes, custom CSS/JS, and anything the user is keeping on their own install do not need this checklist (no PR = no review gate). Skip straight to "does it work in your install?" testing for those.
@@ -289,7 +333,8 @@ Required for every PR:
    - Mobile viewport (resize browser to ~400px wide, or use devtools device emulation)
    - Empty states (no data, empty input, missing field)
    - Error states (failed request, invalid input, network offline)
-4. **For any UI change: before/after screenshots captured for the PR body.** Animated GIF if the change is about interaction (typing indicators, modals, drawers, transitions).
+4. **For any UI change: visual consistency double-check.** Match the styling of the surrounding UI — same Tailwind classes, same color tokens, same spacing scale, same component patterns (buttons, inputs, modals, drawers). Don't introduce one-off styles or hardcoded colors. Verify the new element doesn't clutter available space, doesn't escape its container at narrow widths, and that all text remains visible at mobile sizes (no truncation, no overflow, no buttons running off-screen). Marinara's maintainers care about UI consistency a lot — a feature that *works* but looks "off" gets sent back.
+5. **For any UI change: before/after screenshots captured for the PR body.** Animated GIF if the change is about interaction (typing indicators, modals, drawers, transitions).
 
 If the user hasn't done all of these, **do not let them submit.** Smaller fully-working PRs land in one round; bigger ones that skip this checklist need three rounds of fixes and burn maintainer time.
 
@@ -342,6 +387,10 @@ This avoids the stacking failure mode where one agent juggles three PRs and rush
 - **"I'll just fix this in the PR's branch directly"** → If it's not your PR, don't push to the author's branch. Leave a review comment.
 - **"This bug is obvious from the code, no need to repro"** → Repro anyway. The "obvious" cause is wrong about a quarter of the time.
 - **"It's a small change, I'll skip the edge cases"** → Light/dark, mobile, empty, error. Five minutes of clicking saves three rounds of review.
+- **Adding "🤖 Generated with Claude Code" or "Co-Authored-By: Claude" trailers to commits/PRs** → Marinara's maintainers prefer commits and PRs that read as the contributor's work. Don't add bot self-attribution unless the user specifically asks for it.
+- **"Let me push this small fix straight to `main`"** → Never. All changes go through a branch + PR + review. Even one-line "obvious" hotfixes. Merging to `main` is the maintainer's call, not yours.
+- **"This new button looks fine, ship it"** → Match the existing styling. Same Tailwind tokens, same component patterns, same spacing. A working-but-visually-inconsistent UI element gets sent back in review.
+- **"I tested it in dev mode, that's enough"** → If you've got the dual-install set up (see Section 4), test in the **test install** specifically. Dev mode HMR can mask production-only failures.
 
 ### Validation reference
 
