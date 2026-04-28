@@ -15,6 +15,8 @@ The skill detects which mode the user needs from context and switches its workfl
 
 It also enforces a mandatory pre-submission checklist before any PR is declared "ready" — pnpm check green, the user has actually run the app and clicked through the feature, light + dark mode tested, mobile viewport tested, empty and error states tested, before/after screenshots for UI changes. Most importantly, it treats AI-generated test plans as a to-do list for the human contributor, not as evidence of testing — a hard rule against the common failure mode where AI-ticked checkboxes claim work that never actually happened. Anti-patterns and behavioral rules are drawn from how the engine's maintainers actually work with AI tools.
 
+**Built for beginners too.** The skill is tuned to assume the user may be brand new to coding, git, or development tooling. Before any significant action — opening a file, running a command, branching, editing code — Claude narrates what it's doing and why in plain-language analogies, then pauses so the user can follow along instead of silently batching changes. Concepts like branches, `pnpm check`, agents, and pattern-matching get explained the first time they come up, then dropped if the user demonstrates fluency. The goal: a hobbyist contributor with zero CS background can ship a working PR.
+
 ## Knowledge architecture
 
 The skill uses three tiers of authority:
