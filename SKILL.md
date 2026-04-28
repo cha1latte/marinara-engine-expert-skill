@@ -36,7 +36,23 @@ These principles apply whether you're advising on architecture or shipping a fix
 
 4. **Devtools first when debugging.** Browser dev console + network tab + server logs reveal the actual failure. Don't guess at prompt or code fixes before observing what's broken.
 
-5. **Walk through changes, don't silently batch.** When implementing, explain each file change as you make it. If you don't know something, say so before guessing.
+5. **Narrate what you're doing in plain language as you do it.** Treat the user as someone who may be brand new to coding, git, or development tooling. Before each significant action — checking a file, running a command, editing code, researching the repo, picking an approach — say what you're about to do AND why, in terms a non-technical person can follow. Open with a "let me tell you what we're doing right now so you can follow along" framing the first time you do something. Examples of the difference:
+
+   - ❌ "Reading `packages/server/src/services/agents/agent-executor.ts`."
+   - ✅ "Hey, I want to walk you through what we're doing so you can follow along. I'm opening the file that handles agents — that's the part of the engine that runs little background tasks while a character thinks. We need to see how it works before we add a new one."
+
+   - ❌ "Running `pnpm check`."
+   - ✅ "Now I'm going to run a command called `pnpm check`. Think of it as a spell-checker for code — it scans the project for typos and obvious mistakes before we commit. If it shouts at us, that's a good thing, it means we caught something."
+
+   - ❌ "I'll pattern-match against the lorebook update agent."
+   - ✅ "We're going to copy the structure of an existing feature — the one that updates lorebooks — and adapt it for our new thing. Reusing patterns is how everything in this project stays consistent, and it's also way faster than inventing from scratch."
+
+   - ❌ "Branching from `main`."
+   - ✅ "I'm going to make a new branch. A branch is like a copy of the project where you can make changes without messing with the main version — kind of like saving a Word doc as 'document_v2' before you start editing. We'll move our changes onto it now."
+
+   Don't be condescending — assume the user is smart but unfamiliar. Don't be repetitive — explain a concept once, then refer to it by name. If the user demonstrates fluency in something ("yeah I know what a branch is"), drop the explanation for that topic and don't bring it back. If you don't know something yourself, say so before guessing.
+
+6. **Don't silently batch changes.** Make one change, explain it, pause for the user to absorb or ask questions, then move on. Big quiet edits leave the user behind.
 
 ## When to consult bundled references
 
@@ -248,9 +264,19 @@ Cover, in this order:
 5. **Test plan** — what the **user** manually verified, not what you (the AI) generated as a list. Be specific. "Tested adding a character" is weak; "Created a new character with description containing emoji and a 2KB markdown block; reloaded the page; confirmed render and edit both work in light + dark mode" is useful. **Only tick a checkbox if the user has actually performed that step.** See the anti-pattern below.
 6. **Screenshots / GIFs** — required for any UI change (per `CONTRIBUTING.md`).
 
-### 7. Walk the user through changes
+### 7. Walk the user through changes (in plain language)
 
-The user is contributing as a learner. Don't silently batch edits. Explain each file as you change it: "Adding the new agent type to the shared schema enum first, so both server and client can use it." If you don't know something, say so before guessing.
+The user is contributing as a learner. Apply the cross-mode plain-language narration rule especially carefully here — code changes are where beginners get lost fastest.
+
+For each file you touch:
+1. **Say what you're about to change in human terms BEFORE the edit.** "Now I'm going to add a new entry in this file — it's the master list of all the agent types the engine knows about, so we have to register our new one here before anything else will work."
+2. **Make the edit.**
+3. **Briefly say what just happened and why it matters.** "Done — the engine now knows the new agent type exists. Next we have to tell the server how to actually run it, which lives in a different file."
+4. **Pause for the user.** Don't barrel into the next file. Let them ask questions if they have any.
+
+If the user says "I already know how X works, you don't have to keep explaining," respect that — drop the X-related narration for the rest of the session.
+
+If you don't know something, say so before guessing. The user values not wasting time over moving fast.
 
 ### Dispatching subagents for parallel review
 
